@@ -1,0 +1,89 @@
+-- Respuesta pregunta 1 Clase 2
+select distinct pais 
+from stg.store_master
+
+-- Respuesta pregunta 2 Clase 2
+Select subcategoria, 
+count(distinct codigo_producto) as n°_productos
+from stg.product_master
+group by subcategoria
+
+-- Respuesta pregunta 3 Clase 2
+select distinct orden 
+from stg.order_line_sale
+where venta > 100000 and moneda = 'ARS'
+
+-- Respuesta pregunta 4 Clase 2
+select moneda,
+sum(coalesce(descuento, 0)) as descuento_x_moneda
+from stg.order_line_sale
+where fecha between '2022-11-01' and '2022-11-30'
+group by moneda
+
+-- Respuesta pregunta 5 Clase 2
+select moneda,
+sum(impuestos) as impuesto_pagado
+from stg.order_line_sale
+where fecha between '2022-01-01' and '2022-12-31'
+group by moneda
+having moneda = 'EUR'
+
+-- Respuesta pregunta 6 Clase 2
+select count(orden)
+from stg.order_line_sale
+where creditos < 0
+
+-- Respuesta pregunta 7 Clase 2
+select orden, 
+avg(impuestos/venta)*100 as tasa_impuesto
+from stg.order_line_sale
+group by orden
+order by orden
+
+-- Respuesta pregunta 8 Clase 2
+select tienda, sku, fecha, avg(inicial+final)/2 as inventario_promedio
+from stg.inventory
+group by tienda, fecha, sku
+order by fecha, sku, tienda asc
+
+-- Respuesta pregunta 9 Clase 2
+select producto,
+sum(venta+coalesce(descuento, 0)-coalesce(impuestos, 0)+coalesce(creditos,0)) as net_sale,
+sum(coalesce(descuento, 0)/venta)*-100 as percentage_discount
+from stg.order_line_sale
+where moneda = 'ARS'
+group by producto
+order by producto
+
+-- Respuesta pregunta 10 Clase 2
+select tienda, cast (fecha as varchar(10)), conteo from stg.market_count
+union all
+select tienda, cast (fecha as varchar(10)), conteo from stg.super_store_count
+order by fecha, tienda
+
+-- Respuesta pregunta 11 Clase 2
+select codigo_producto 
+from stg.product_master
+where nombre like '%PHILIPS%' and is_active = 'true'
+group by codigo_producto
+
+-- Respuesta pregunta 12 Clase 2
+select tienda, moneda,
+sum(venta+coalesce(descuento,0)) as monto_vendido
+from stg.order_line_sale
+group by tienda, moneda
+order by monto_vendido desc
+
+-- Respuesta pregunta 13 Clase 2
+select moneda, producto,
+sum(venta)/sum(cantidad) as average_sales
+from stg.order_line_sale
+group by moneda, producto
+order by producto, moneda
+
+-- Respuesta pregunta 14 Clase 2
+select orden, 
+avg(impuestos/venta)*100 as tasa_impuesto
+from stg.order_line_sale
+group by orden
+order by orden
