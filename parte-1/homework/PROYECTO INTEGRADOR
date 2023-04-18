@@ -1,0 +1,441 @@
+-- VENTAS:
+
+-- Ventas Brutas, netas y margen
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select sum(ou.ventas_usd) as ventas_brutas, sum(ou.ventas_usd+ou.descuentos_usd) as ventas_netas,
+sum(ou.ventas_usd+ou.descuentos_usd-co.costo_promedio_usd) as margen
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto;
+
+-- Margen por categoria de producto
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select pm.categoria, sum(ou.ventas_usd + ou.descuentos_usd - co.costo_promedio_usd) as margen
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto
+left join stg.product_master pm on ou.producto = pm.codigo_producto 
+group by pm.categoria 
+
+-- ROI por categoria de produto. ROI = Ventas netas / Valor promedio de inventario
+-- Este no lo entendí, me hice un enredo enorme de query que preferí no subir ya que no llegaba a nada que tuviese sentido,
+-- no obstante, si me aclaran o explican qué es o cómo se obtiene el Valor promedio de inventario realizo el ejercicio 
+-- y actualizo este punto.
+
+-- AOV (Average order value), valor promedio de la orden.
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select ou.orden, sum(ou.ventas_usd + ou.descuentos_usd)/count(*) as valor_orden_promedio
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto
+group by ou.orden
+order by ou.orden
+
+-- CONTABILIDAD:
+
+-- Impuestos pagados
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select sum(ou.impuestos_usd) as impuesto_total_pagado
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto;
+
+-- Tasa de impuesto. Impuestos / Ventas netas
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select sum(ou.impuestos_usd) as impuesto_total_pagado, sum(ou.ventas_usd + ou.descuentos_usd) as ventas_netas,
+sum(ou.impuestos_usd)/sum(ou.ventas_usd + ou.impuestos_usd) as tasa_de_impuesto
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto;
+
+-- Cantidad de creditos otorgados
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select count(ou.creditos_usd) as numero_de_creditos_otorgados, sum(ou.creditos_usd)*-1 as cantidad_en_creditos_otorgados
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto
+where ou.creditos_usd < 0;
+
+-- Valor pagado final por order de linea. Valor pagado: Venta - descuento + impuesto - credito
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select ou.orden, ou.producto, sum(ou.ventas_usd+ou.descuentos_usd+ou.impuestos_usd+ou.creditos_usd) as valor_final
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto
+group by ou.orden, ou.producto
+order by ou.orden;
+
+--- Nota: La siguiente Query reune los tres primeros puntos en una sola consulta y
+-- muestra: Impuesto total pagado, tasa de impuesto, cantidad de créditos (número 
+-- de otorgados y cantidad total en usd).
+with ols_usd as (
+select *, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+)
+select  sum(ou.impuestos_usd) as impuesto_total_pagado, 
+		sum(ou.impuestos_usd)/sum(ou.ventas_usd + ou.impuestos_usd) as tasa_de_impuesto,
+		count(ou.creditos_usd) as numero_de_creditos_otorgados, 
+		sum(ou.creditos_usd)*-1 as cantidad_en_creditos_otorgados
+from ols_usd as ou
+left join stg.cost co on ou.producto = co.codigo_producto
+where ou.creditos_usd < 0;
+
+-- SUPLY CHAIN:
+
+-- Costo de inventario promedio por tienda
+with promedios_de_inventario as (
+select i.tienda, i.sku, (sum(i.inicial+i.final)/2)/count(*) as cantidad_promedio, 
+((sum(i.inicial+i.final)/2)/count(*))*(c.costo_promedio_usd) as costo_usd
+from stg.inventory i
+left join stg.cost c on i.sku = c.codigo_producto
+group by i.tienda, i.sku, c.costo_promedio_usd
+order by i.tienda, i.sku
+)
+select pdi.tienda, sum(costo_usd) as costo_promedio_inventario
+from promedios_de_inventario as pdi
+group by pdi.tienda;
+
+
+-- Costo del stock de productos que no se vendieron por tienda
+-- FORMA 1 muestra costo del stock que no se vendió por tienda
+-- omitiendo el stock de los productos que presentaron ventas >= 1
+with productos_no_vendidos as (
+	select i.tienda, i.sku, ols.cantidad, (sum(i.inicial+i.final)/2)/count(*) as inventario
+	from stg.order_line_sale ols
+	full outer join stg.inventory i on ols.producto = i.sku and i.fecha = ols.fecha and i.tienda = ols.tienda
+	group by i.tienda, i.sku, ols.cantidad
+)
+select pnv.tienda, sum(c.costo_promedio_usd*pnv.inventario) as costo_no_vendidos 
+from productos_no_vendidos as pnv
+left join stg.cost c on pnv.sku = c.codigo_producto
+where pnv.cantidad is null 
+group by pnv.tienda;
+
+-- FORMA 2 muestra costo del stock que no se vendió por tienda
+-- incluyendo el stock restante de los productos que presentaron 
+-- ventas
+with promedios_de_inventario as (
+select i.tienda, i.sku, c.costo_promedio_usd, (sum(i.inicial+i.final)/2)/count(*) as inventario_promedio, 
+((sum(i.inicial+i.final)/2)/count(*))*(c.costo_promedio_usd) as costo_usd
+from stg.inventory i
+left join stg.cost c on i.sku = c.codigo_producto
+group by i.tienda, i.sku, c.costo_promedio_usd
+order by i.tienda, i.sku
+), productos_vendidos_tienda as (
+select producto, tienda, sum(cantidad) as cantidad_vendida
+from stg.order_line_sale
+group by producto, tienda
+)
+select pdi.tienda, sum(coalesce(pdi.inventario_promedio,0))-sum(coalesce(pvt.cantidad_vendida,0)) as stock_no_vendido,
+sum((coalesce(pdi.inventario_promedio,0)-coalesce(pvt.cantidad_vendida,0))*pdi.costo_promedio_usd) as costo_pdts_no_vendidos
+from promedios_de_inventario as pdi
+full outer join productos_vendidos_tienda as pvt on pdi.sku = pvt.producto and pdi.tienda = pvt.tienda
+group by pdi.tienda;
+
+-- Cantidad y costo de devoluciones
+with returned_usd as (
+select rm.*, c.costo_promedio_usd
+from stg.return_movements rm
+left join stg.cost c on rm.item = c.codigo_producto
+)	
+select count(cantidad) as cantidad_devoluciones, sum(costo_promedio_usd) as costo_devoluciones_usd
+from returned_usd
+where desde = 'Cliente'
+group by cantidad;
+
+-- TIENDAS:
+
+-- Ratio de conversion. Cantidad de ordenes generadas / Cantidad de gente que entra
+with ordenes_x_tienda as (
+select tienda, count(distinct orden) as cantidad_de_ordenes
+from stg.order_line_sale
+group by tienda
+), transito_tienda as (
+select tienda, round(coalesce(avg(conteo),0),1) as promedio_personas
+from stg.super_store_count
+group by tienda
+)
+select oxt.tienda, coalesce(tt.tienda, 0) as tienda_con_transito, coalesce((oxt.cantidad_de_ordenes/tt.promedio_personas),0) as ratio_conversion
+from ordenes_x_tienda as oxt
+left join transito_tienda as tt on oxt.tienda = tt.tienda;
+
+-- Crear y subir a nuestra DB la tabla "return_movements" para poder utilizarla en la segunda parte.
+
+CREATE TABLE stg.return_movements
+	(
+		  orden_venta VARCHAR(10)
+		, envio VARCHAR(10)
+		, item VARCHAR(10)
+		, cantidad INT
+		, id_movimiento INT
+		, desde VARCHAR(100)
+		, hasta VARCHAR(100)
+		, recibido_por VARCHAR(255)
+		, fecha DATE
+	);
+	
+-- PREGUNTAS DE ENTREVISTAS:
+
+-- Como encuentro duplicados en una tabla. Dar un ejemplo mostrando duplicados de la columna orden en la tabla de ventas.
+
+-- RESPUESTA:
+-- Primero utilizamos la clausula SELECT para 
+-- determinar la columna que deseamos consultar para 
+-- verificar si se encuentran duplicados, seguido de 
+-- la cláusula COUNT(*) la cual se encargará se sumar 
+-- todos los valores contenidos en la columna. 
+-- Posteriormente, indicaremos la tabla desde la cual 
+-- realizaremos la consulta y agruparemos ese resultado 
+-- por la columna o dato seleccionado, aplicando la 
+-- cláusula HAVING junto con la cláusula COUNT(*) ya
+-- utilizada para que devulva aquellos valores que 
+-- cumplan la condición señalada, en este caso, ser
+-- mayores que uno (>1).
+
+select orden, count(*)
+from stg.order_line_sale
+group by orden
+having count(orden)>1
+
+-- Como elimino duplicados?
+
+-- RESPUESTA:
+-- Para eliminar valores duplicados de una consulta
+-- podemos utilizar la cláusula DISTINC o, si deseamos
+-- realizar operaciones en la consulta, utilizaremos
+-- la cláusula GROUP BY.
+
+select distinct(orden)
+from stg.order_line_sale -- Forma 1
+
+select orden, sum(venta)
+from stg.order_line_sale
+group by orden -- Forma 2
+
+-- Cual es la diferencia entre UNION y UNION ALL
+
+-- RESPUESTA:
+-- UNION une dos tablas dejando los registros 
+-- que son distintos, elimnando los repetidos. 
+-- UNION ALL une dos tablas dejando todos los 
+-- registros.
+
+-- Como encuentro registros en una tabla que no estan en otra tabla
+
+-- RESPUESTA:
+-- Utilizando la cláusula FULL OUTER JOIN que combina ambas
+-- tablas devolviendo tanto filas coincidentes de ambas tablas 
+-- como filas no coincidentes con valores null.
+
+create table bkp.tabla1
+	(
+			id INT
+	);
+create table bkp.tabla2
+	(
+			id INT
+	);
+insert into bkp.tabla1 values (1), (2), (3), (4);
+insert into bkp.tabla2 values (5), (6), (7), (8);
+
+select * 
+from bkp.tabla1 t1
+full outer join bkp.tabla2 t2 on t1.id = t2.id
+
+-- CUal es la diferencia entre INNER JOIN y LEFT JOIN
+
+-- RESPUESTA:
+-- INNER JOIN devulve sólo las filas coincidentes 
+-- en ambas tablas mientras que LEFT JOIN devuelve
+-- todas las filas de la tabla izquierda y las filas 
+-- coincidentes de la tabla derecha.
+
+select * 
+from bkp.tabla1 t1
+inner join bkp.tabla2 t2 on t1.id = t2.id -- no devolverá resultados ya que ninguna fila coincide entre ambas tablas
+
+select * 
+from bkp.tabla2 t2
+left join bkp.tabla1 t1 on t1.id = t2.id -- devolvera sólo las filas de la tabla izquierda ya que ninguna fila de la derecha coincide con la primera
