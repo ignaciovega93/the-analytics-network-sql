@@ -1,0 +1,99 @@
+-- Respuesta pregunta 1 clase 4
+create schema bkp;
+
+select * 
+into bkp.product_master_20230407
+from stg.product_master;
+
+-- Respuesta pregunta 2 clase 4
+update bkp.product_master_20230407 
+set material = 'N/A'
+where material is null;
+
+update bkp.product_master_20230407 
+set color = 'N/A'
+where color is null;
+
+-- Respuesta pregunta 3 clase 4
+update bkp.product_master_20230407 
+set is_active = 'false'
+where subsubcategoria = 'Control remoto';
+
+-- Respuesta pregunta 4 clase 4
+alter table bkp.product_master_20230407
+add column is_local bool default false;
+
+update bkp.product_master_20230407
+set is_local = true
+where origen = 'Argentina'; -- Hasta aqui FORMA 1
+
+alter table bkp.product_master_20230407
+add column is_local bool;
+
+update bkp.product_master_20230407
+set is_local = case 
+	when origen = 'Argentina' then true 
+	else false
+	end
+; -- Hasta aqui FORMA 2
+
+-- Respuesta pregunta 5 clase 4
+select * 
+into bkp.order_line_sale
+from stg.order_line_sale; -- primero cree un respaldo de la tabla original, lo que sigue es el ejercicio como tal
+
+alter table stg.order_line_sale
+add column line_key varchar(20);
+
+update stg.order_line_sale
+set line_key = orden || ' - ' || producto;
+
+
+-- Respuesta pregunta 6 clase 4
+delete from stg.order_line_sale
+where pos = 1;
+
+-- Respuesta pregunta 7 clase 4
+create table bkp.employees
+		(
+			  id SERIAL -- Aquí vi que normalmente id se establece como PRIMARY KEY pero no lo utilice ya que no alcance a investigarlo bien y la query creaba la tabla de igual forma.
+			, nombre VARCHAR(50)
+			, apellido VARCHAR(50)
+			, fecha_entrada DATE
+			, fecha_salida DATE
+			, telefono VARCHAR(12)
+			, pais VARCHAR(50)
+			, provincia VARCHAR(100)
+			, codigo_tienda SMALLINT
+			, posicion VARCHAR(100)
+		);
+
+-- Respuesta pregunta 8 clase 4
+insert into bkp.employees(nombre, apellido, fecha_entrada, fecha_salida, telefono, pais, provincia, codigo_tienda, posicion)
+VALUES 	('Juan', 'Perez', '2022-03-01', null, '+54113869867', 'Argentina', 'Santa Fe', 2, 'Vendedor'),
+		('Catalina', 'Garcia', '2022-03-01', null, null, 'Argentina', 'Buenos Aires', 2, 'Representante Comercial'),
+		('Ana', 'Valdez', '2020-02-21', '2022-03-01', null, 'España', 'Madrid', 8, 'Jefe Logistica'),
+		('Fernando', 'moralez', '2022-04-04', null, null, 'España', 'Valencia', 9, 'Vendedor'); 
+	
+-- Respuesta pregunta 9 clase 4
+-- Busqué información sobre el tipo de dato "datetime" y vi que no existe en PostgreSQL al contrario de lo que sucede en MySQL, 
+-- pero que el equivalente en PostgreSQL es "timestamp", asi que lo hice con este.
+select *, current_timestamp as last_update_ts
+into bkp.cost_20230408
+from stg.cost
+
+-- Respuesta pregunta 10 clase 4
+drop table stg.order_line_sale;
+
+select *
+into stg.order_line_sale
+from bkp.order_line_sale;
+
+-- Nota: Con esta Query volvemos la tabla a su estado 
+-- original. Como se puede ver es posible sólo si en
+-- el ejecicio 5 o 6 se hizo un respaldo de la tabla, de 
+-- lo contrario, habiendo borrado o modificado datos 
+-- en la tabla original (lo que piden capsiosamente 
+-- los ejercicios 5 y 6) sin respaldarla antes, no 
+-- podríamos haber restaurado la tabla a su estado 
+-- original, habiendo perdido los datos.
