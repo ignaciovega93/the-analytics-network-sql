@@ -63,10 +63,46 @@ left join stg.cost co on ou.producto = co.codigo_producto
 left join stg.product_master pm on ou.producto = pm.codigo_producto 
 group by pm.categoria 
 
--- ROI por categoria de produto. ROI = Ventas netas / Valor promedio de inventario
--- Este no lo entendí, me hice un enredo enorme de query que preferí no subir ya que no llegaba a nada que tuviese sentido,
--- no obstante, si me aclaran o explican qué es o cómo se obtiene el Valor promedio de inventario realizo el ejercicio 
--- y actualizo este punto.
+-- ROI por categoria de produto. ROI = Ventas netas / Valor promedio de inventario (TENGO MUCHAS DUDAS SOBRE SI ESTE ESTA BIEN ASÍ)
+with ols_pm as (
+select ols.producto, pm.categoria, ols.tienda, ols.fecha, 
+	case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+	end as ventas_usd,
+	case 
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+	end as descuentos_usd,
+	case 
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+	end as impuestos_usd,
+	case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+	end as creditos_usd
+from stg.order_line_sale ols
+left join stg.product_master pm on ols.producto = pm.codigo_producto
+left join stg.monthly_average_fx_rate fx on fx.mes = date(date_trunc('month', ols.fecha))
+), promedios_de_inventario as (
+select i.tienda, i.sku, i.fecha, (sum(i.inicial+i.final)/2)/count(*) as cantidad_promedio, 
+((sum(i.inicial+i.final)/2)/count(*))*(c.costo_promedio_usd) as costo_usd
+from stg.inventory i
+left join stg.cost c on i.sku = c.codigo_producto
+group by i.tienda, i.sku, i.fecha, c.costo_promedio_usd
+order by i.tienda, i.sku
+)
+select op.categoria, (sum(op.ventas_usd+op.descuentos_usd))/sum(pdi.costo_usd) as ROI
+from ols_pm as op
+left join promedios_de_inventario as pdi 
+	on op.producto = pdi.sku 
+	and op.fecha = pdi.fecha
+group by op.categoria
 
 -- AOV (Average order value), valor promedio de la orden.
 with ols_usd as (
