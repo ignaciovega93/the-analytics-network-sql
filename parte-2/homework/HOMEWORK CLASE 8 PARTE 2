@@ -1,0 +1,156 @@
+-- Respuesta Pregunta 1 Clase 8 Parte 2
+/* 1. Realizar el Ejercicio 6 de la clase 6 donde calculabamos la contribucion de las ventas 
+brutas de cada producto utilizando una window function.*/
+-- Este y el siguiente ejercicio los resolví utilizando la vista que creamos en el ejercicio 3, clase 6
+
+select
+	orden,
+	producto,
+	round((ventas_usd/sum(ventas_usd) over(partition by orden))*100, 2) as contribucion_venta
+from
+	stg.ols_usd
+
+-- Respuesta Pregunta 2 Clase 8 Parte 2
+/* 2. La regla de pareto nos dice que aproximadamente un 20% de los productos generan un 80% 
+de las ventas. Armar una vista a nivel sku donde se pueda identificar por orden de 
+contribucion, ese 20% aproximado de SKU mas importantes. 
+(Nota: En este ejercicios estamos construyendo una tabla que muestra la regla de Pareto)*/
+
+CREATE OR REPLACE VIEW stg.sales_contribution as (
+	with pareto as (
+		select
+			producto,
+			round((ventas_usd/sum(ventas_usd) over())*100, 3) as product_contribution
+		from
+			stg.ols_usd
+	)
+	select 
+		producto,
+		sum(product_contribution) as total_product_contribution
+	from 
+		pareto
+	group by 
+		producto
+	order by 
+		total_product_contribution desc
+);
+
+-- Respuesta Pregunta 3 Clase 8 Parte 2
+/* 3. Calcular el crecimiento de ventas por tienda mes a mes, con el valor nominal y el 
+valor % de crecimiento.*/
+
+with sales_per_month as(
+	select
+		tienda,
+		extract(year from fecha) || '-' || extract(month from fecha) as fecha,
+		moneda as nominal_currency,
+		sum(venta) as ventas_mes
+	from stg.order_line_sale
+	group by tienda, extract(year from fecha)|| '-' || extract(month from fecha), moneda
+	order by 1, 2
+)
+select 
+	tienda,
+	fecha,
+	nominal_currency,
+	round(ventas_mes - lag(ventas_mes) over(partition by tienda order by fecha), 2) as nominal_growth,
+	round(((ventas_mes - lag(ventas_mes) over(partition by tienda order by fecha))/ventas_mes), 4) as percentual_growth		
+from sales_per_month
+;
+
+-- Respuesta Pregunta 4 Clase 8 Parte 2
+/* 4. Crear una vista a partir de la tabla "return_movements" que este a nivel Orden 
+de venta, item y que contenga las siguientes columnas:
+* Orden
+* Sku
+* Cantidad unidated retornadas
+* Valor USD retornado (resulta de la cantidad retornada * valor USD del precio unitario 
+bruto con que se hizo la venta)
+* Nombre producto
+* Primera_locacion (primer lugar registrado, de la columna "desde", para la orden/producto)
+* Ultima_locacion (el ultimo lugar donde se registro, de la columna "hasta", el producto/orden)*/
+
+CREATE OR REPLACE VIEW stg.new_rm as(
+with common_bases as (
+	select
+		rm.orden_venta as orden,
+		rm.item as sku,
+		sum(rm.cantidad) as cantidad_devuelta,
+		c.costo_promedio_usd as costo_unitario,
+		rm.id_movimiento,
+		rm.desde,
+		rm.hasta,
+		rm.fecha
+	from 
+		stg.return_movements rm
+	left join
+		stg.cost c
+		on
+			rm.item = c.codigo_producto
+	group by 1, 2, 4, 5, 6, 7, 8
+	order by 5
+)
+select 
+	distinct(orden),
+	sku,
+	cantidad_devuelta,
+	(cantidad_devuelta*costo_unitario) as returned_usd,
+	first_value(desde) over(partition by orden, sku order by id_movimiento asc) as primera_locacion,
+	last_value(hasta) over(partition by orden, sku) as ultima_locacion
+from common_bases
+)
+;
+
+-- Respuesta Pregunta 5 Clase 8 Parte 2
+/* 5. Crear una tabla calendario llamada "date" con las fechas del 2022 incluyendo 
+el año fiscal y trimestre fiscal (en ingles Quarter). El año fiscal de la empresa 
+comienza el primero Febrero de cada año y dura 12 meses. Realizar la tabla para 2022 
+y 2023. La tabla debe contener:
+
+* Fecha (date)
+* Mes (date)
+* Año (date)
+* Dia de la semana (text, ejemplo: "Monday")
+* "is_weekend" (boolean, indicando si es Sabado o Domingo)
+* Mes (text, ejemplo: June)
+* Año fiscal (date)
+* Año fiscal (text, ejemplo: "FY2022")
+* Trimestre fiscal (text, ejemplo: Q1)
+* Fecha del año anterior (date, ejemplo: 2021-01-01 para la fecha 2022-01-01)
+
+Nota: En general una tabla date es creada para muchos años mas (minimo 10), 
+por el momento nos ahorramos ese paso y de la creacion de feriados.*/
+
+CREATE TABLE stg.date_table as (
+	
+with calendario as(
+	select 
+		cast('2022-01-01' as date) + (n || 'day'):: interval as fecha
+	from
+		generate_series(0, 365) n)
+select
+	fecha as fecha_id,
+	cast(fecha as date) as fecha,
+	extract(month from fecha) as n_mes,
+	extract(year from date_trunc('year', fecha)::date) as anno,
+	to_char(date_trunc('day', fecha)::date, 'day') as dia_semana,
+	case
+		when extract(dow from fecha) in (0, 6) then true
+		else false
+		end as is_weekend,
+	to_char(date_trunc('day', fecha)::date, 'month') as mes,
+	concat('FY', case 
+		   			when extract(month from fecha) < 2 then extract(year from fecha)-1 
+					else extract(year from fecha)
+					end) as anno_fiscal,
+	concat('Q', case
+		  			when extract(month from fecha) in (2, 3, 4) then '1'
+		  			when extract(month from fecha) in (5, 6, 7) then '2'
+		   			when extract(month from fecha) in (8, 9, 10) then '3'
+					else '4'
+					end) as trimestre_fiscal,
+	(fecha-interval '1 year')::date as fecha_anno_anterior
+from
+	calendario
+)
+;
