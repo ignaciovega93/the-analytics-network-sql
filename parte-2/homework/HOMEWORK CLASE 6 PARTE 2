@@ -1,0 +1,511 @@
+-- Respuesta Pregunta 1 - Clase 1 - Parte 2.
+CREATE VIEW stg.unified_store_count AS
+
+	select 
+		tienda, 
+		cast (fecha as varchar(10)), 
+		conteo 
+	from stg.market_count
+	union all
+	select 
+		tienda, 
+		cast (fecha as varchar(10)), 
+		conteo 
+	from stg.super_store_count
+	order by 
+		fecha, 
+		tienda
+;
+
+-- Respuesta Pregunta 2 - Clase 1 - Parte 2.
+/*primero agregué el archivo importandolo a la tabla
+super_store_count ya existente y luego utilicé la
+clausula CREATE OR REPLACE*/
+
+CREATE OR REPLACE VIEW stg.unified_store_count AS
+
+	select 
+		tienda, 
+		cast (fecha as varchar(10)),
+		conteo 
+	from stg.market_count
+	union all
+	select 
+		tienda, 
+		cast (fecha as varchar(10)),
+		conteo 
+	from stg.super_store_count
+	order by 
+		fecha, 
+		tienda
+;
+/*Si hubiesemos tenido una tabla y no una vista, no nos
+hubiese servido la clausula CREATE OR REPLACE VIEW, y 
+tendriamos que utilizar una cláusula UPDATE para agregar 
+los nuevos datos como nuevas filas*/
+
+-- Respuesta Pregunta 3 - Clase 1 - Parte 2.
+CREATE OR REPLACE VIEW stg.ols_usd AS
+
+with revenues_usd as (
+	select 
+		ols.line_key,
+		ols.orden,
+		ols.producto,
+		ols.tienda,
+		ols.fecha,
+		ols.cantidad,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4) as ventas_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU'   
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		end, 4) as descuentos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.impuestos/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.impuestos/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.impuestos/fx.cotizacion_usd_eur
+		end, 4) as impuestos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+		end, 4) as creditos_usd,
+		c.costo_promedio_usd as costo_usd,
+		ols.moneda,
+		ols.pos,
+		ols.is_walkout
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.cost c 
+	on 
+		ols.producto = c.codigo_producto
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+)
+select 
+	*,
+	(ventas_usd+coalesce(descuentos_usd, 0)-costo_usd) as margen_ventas_usd
+from 
+	revenues_usd
+;
+
+-- Respuesta Pregunta 4 - Clase 1 - Parte 2.
+select
+	orden || ' - ' || producto,
+	count (*)
+from 
+	stg.order_line_sale
+group by 
+	orden, 
+	producto
+having 
+	count(*) > 1
+;
+
+/*Tambien hice otra Query utilizando la columna previamente
+concatenada creada en Ejercicio 5 - Clase 4 - Parte 1*/
+
+/*
+alter table stg.order_line_sale
+add column line_key varchar(20);
+
+update stg.order_line_sale
+set line_key = orden || ' - ' || producto;
+*/
+Select 
+	line_key,
+	count(*)
+from 
+	stg.order_line_sale
+group by 
+	line_key
+having 
+	count(*) > 1
+;
+
+-- Respuesta Pregunta 5 - Clase 1 - Parte 2.
+select 
+	ou.producto, 
+	pm.subcategoria,
+	sum(ou.margen_ventas_usd) as margen_bruto
+from 
+	stg.ols_usd ou
+left join 
+	stg.product_master pm 
+	on ou.producto = pm.codigo_producto
+group by
+	ou.producto,
+	pm.subcategoria
+order by
+	pm.subcategoria
+;
+
+-- Respuesta Pregunta 6 - Clase 1 - Parte 2.
+with ols_usd as (
+	select 
+		ols.orden,
+		ols.producto,
+		ols.tienda,
+		ols.fecha,
+		ols.cantidad,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4) as ventas_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU'   
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		end, 4) as descuentos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.impuestos/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.impuestos/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.impuestos/fx.cotizacion_usd_eur
+		end, 4) as impuestos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+		end, 4) as creditos_usd,
+		ols.moneda,
+		ols.pos,
+		ols.is_walkout
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+), total_x_orden as (
+	select 
+		orden,
+		sum(round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4)) as venta_orden
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+	group by
+		orden
+)
+select 
+	ou.orden, 
+	ou.producto,
+	round((ou.ventas_usd/txo.venta_orden)*100, 2) as contribucion_a_orden
+from 
+	ols_usd as ou
+left join
+	total_x_orden as txo
+on
+	ou.orden = txo.orden
+group by 
+	ou.orden, 
+	ou.producto,
+	contribucion_a_orden
+order by
+	orden
+;
+
+-- Respuesta Pregunta 7 - Clase 1 - Parte 2.
+/* primero crearé la tabla suppliers e importaré los datos*/
+CREATE TABLE stg.suppliers
+	(
+		  codigo_producto VARCHAR(10)
+		, nombre VARCHAR(255)
+		, is_primary BOOL default false
+	)
+;
+/*Ahora reemplazare la tabla del ejercicio 3 por
+una que contenga los datos de los proveedores*/
+DROP VIEW stg.ols_usd -- el comando CREATE OR REPLACE me dio problemas por lo que me deshice de la vista y la sustituí
+
+CREATE OR REPLACE VIEW stg.ols_usd AS
+
+with revenues_usd as (
+	select 
+		ols.line_key,
+		ols.orden,
+		ols.producto,
+		s.nombre,
+		ols.tienda,
+		ols.fecha,
+		ols.cantidad,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4) as ventas_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU'   
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		end, 4) as descuentos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.impuestos/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.impuestos/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.impuestos/fx.cotizacion_usd_eur
+		end, 4) as impuestos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+		end, 4) as creditos_usd,
+		c.costo_promedio_usd as costo_usd,
+		ols.moneda,
+		ols.pos,
+		ols.is_walkout
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.suppliers s
+	on 
+		ols.producto = s.codigo_producto
+		and s.is_primary = true
+	left join 
+		stg.cost c 
+	on 
+		ols.producto = c.codigo_producto
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+)
+select 
+	*,
+	(ventas_usd+coalesce(descuentos_usd, 0)-costo_usd) as margen_ventas_usd
+from 
+	revenues_usd
+;
+
+-- Respuesta Pregunta 8 - Clase 1 - Parte 2.
+/*Verificar que el nivel de detalle de la vista anterior no se haya modificado, en caso contrario que se 
+debería ajustar? Que decisión tomarias para para
+que no se generen duplciados?*/
+-- RESPUESTA:
+/*Si se generó duplicado hay que revisar el nivel de detalle
+de las tablas de origen de los datos y verificar que el JOIN
+se haga con el nivel de detalle que sea compatible*/
+/*La decisión sería aumentar el nivel de filtrado del JOIN*/
+
+/*Se pide correr la Query de validación*/
+-- RESPUESTA:
+/* Verificador de Nivel de Detalle o Query de Validación:*/
+select 
+	line_key,
+	count(*)
+from stg.ols_usd
+group by 
+	line_key
+having
+	count(*) > 1
+;
+
+/* Crear una nueva Query que no genere duplicación*/
+-- RESPUESTA:
+CREATE OR REPLACE VIEW stg.ols_usd AS
+
+with revenues_usd as (
+	select 
+		ols.line_key,
+		ols.orden,
+		ols.producto,
+		s.nombre,
+		ols.tienda,
+		ols.fecha,
+		ols.cantidad,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4) as ventas_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU'   
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		end, 4) as descuentos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.impuestos/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.impuestos/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.impuestos/fx.cotizacion_usd_eur
+		end, 4) as impuestos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+		end, 4) as creditos_usd,
+		c.costo_promedio_usd as costo_usd,
+		ols.moneda,
+		ols.pos,
+		ols.is_walkout
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.suppliers s
+	on 
+		ols.producto = s.codigo_producto
+		and s.is_primary = true
+	left join 
+		stg.cost c 
+	on 
+		ols.producto = c.codigo_producto
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+)
+select 
+	*,
+	(ventas_usd+coalesce(descuentos_usd, 0)-costo_usd) as margen_ventas_usd
+from 
+	revenues_usd
+;
+
+/*Explicar brevemente (con palabras escrito tipo comentario)*/
+-- RESPUESTA:
+/* En este caso no tuve más duplicados que el
+producto/orden que señalaba problema el enunciado
+del ejercicio 4, es decir, la Orden M999000061.
+No obstante, en un primer momento, mientras realizaba
+el ejercicio anterior, tenia problemas de duplicación,
+revisé la Query y las tablas hasta que me di cuenta 
+que la tabla suppliers tiene algunos productos que 
+tienen más de un proveedor y, al relacionar esto con 
+la columna is_primary, deduje que había que agregar
+al filtrado del JOIN el parametro True de la
+columna BOOL, es decir, joinear sólo cuando el 
+proveedor fuera proveedor primario.
+A continuación expondré la Query original que me 
+presentó problemas en el ejercicio anterior:*/
+CREATE OR REPLACE VIEW stg.ols_usd AS
+
+with revenues_usd as (
+	select 
+		ols.line_key,
+		ols.orden,
+		ols.producto,
+		s.nombre,
+		ols.tienda,
+		ols.fecha,
+		ols.cantidad,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4) as ventas_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU'   
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		end, 4) as descuentos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.impuestos/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.impuestos/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.impuestos/fx.cotizacion_usd_eur
+		end, 4) as impuestos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+		end, 4) as creditos_usd,
+		c.costo_promedio_usd as costo_usd,
+		ols.moneda,
+		ols.pos,
+		ols.is_walkout
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.suppliers s
+	on 
+		ols.producto = s.codigo_producto
+	left join 
+		stg.cost c 
+	on 
+		ols.producto = c.codigo_producto
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+)
+select 
+	*,
+	(ventas_usd+coalesce(descuentos_usd, 0)-costo_usd) as margen_ventas_usd
+from 
+	revenues_usd
+;
