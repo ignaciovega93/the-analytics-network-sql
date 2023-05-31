@@ -1,0 +1,233 @@
+-- Respuesta pregunta 1 Clase 7 Parte 2
+
+with ols_porcentajes as (
+	select
+		count(case when descuento is not null then 1 end) as filled_discount,
+		count(case when descuento is null then 2 end) as null_discount,
+		count(case when descuento is null then 1 else 1 end) as total_of_discounts,
+		count(case when creditos is not null then 1 end) as filled_credits,
+		count(case when creditos is null then 2 end) as null_credits,
+		count(case when creditos is null then 1 else 1 end) as total_of_credits
+	from stg.order_line_sale
+)
+select
+	round(sum((null_discount*100.0)/total_of_discounts), 2) as null_discount_percentage,
+	round(sum((null_credits*100.0)/total_of_credits), 2) as null_credits_percentage
+from ols_porcentajes
+;
+
+-- Respuesta pregunta 2 Clase 7 Parte 2
+
+with revenues_usd as (
+	select 
+		ols.line_key,
+		ols.orden,
+		ols.producto,
+		ols.tienda,
+		ols.fecha,
+		ols.cantidad,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.venta/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.venta/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.venta/fx.cotizacion_usd_eur
+		end, 4) as ventas_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU'   
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		end, 4) as descuentos_usd,
+		round(case 
+			when ols.moneda = 'ARS' 
+			then ols.impuestos/fx.cotizacion_usd_peso
+			when ols.moneda = 'URU' 
+			then ols.impuestos/fx.cotizacion_usd_uru
+			when ols.moneda = 'EUR' 
+			then ols.impuestos/fx.cotizacion_usd_eur
+		end, 4) as impuestos_usd,
+		ols.moneda,
+		ols.pos,
+		ols.is_walkout
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.monthly_average_fx_rate fx 
+	on 
+		fx.mes = date(date_trunc('month', ols.fecha))	
+)
+select 
+	tienda,
+	count(case when is_walkout = true then 1 else null end) as walkout_orders,
+	sum(case when is_walkout = true then ventas_usd else null end) as usd_walkout_sales,
+	round((sum(case when is_walkout = true then ventas_usd else null end)/sum(ventas_usd))*100, 2) as walkout_percentage_over_sales
+from revenues_usd
+group by 1
+;
+
+-- Respuesta pregunta 3 Clase 7 Parte 2
+
+with verificador_duplicados as (
+	select 
+		orden,
+		producto,
+		row_number() over(partition by orden, producto) as rn
+	from stg.order_line_sale
+)
+select 
+	orden, 
+	producto
+from verificador_duplicados
+where rn = 1 -- con esta query se excluyen los duplicados
+/* tambien podemos cambiar por WHERE rn > 1 para ver cuales o cuantos son los valores duplicados*/
+
+-- Respuesta pregunta 4 Clase 7 Parte 2 (la pregunta dice categoría, pero por el enunciado supuse que era por subcategoría, así que lo hice con ésta)
+
+with ols_usd as (
+	select
+		ols.orden,
+		ols.producto,
+		pm.subcategoria,
+		ols.tienda,
+		sm.pais,
+		ols.fecha,
+		ols.cantidad,
+		round(case
+			  when ols.moneda = 'ARS' 
+			  then ols.venta/fx.cotizacion_usd_peso
+			  when ols.moneda = 'URU'
+			  then ols.venta/fx.cotizacion_usd_uru
+			  when ols.moneda = 'EUR' 
+			  then ols.venta/fx.cotizacion_usd_eur
+			  end, 4) as ventas_usd,
+		round(case
+			  when ols.moneda = 'ARS'
+			  then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+			  when ols.moneda = 'URU'
+			  then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+			  when ols.moneda = 'EUR' 
+			  then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+			  end, 4) as descuentos_usd,
+		round(case
+			  when ols.moneda = 'ARS'
+			  then ols.impuestos/fx.cotizacion_usd_peso
+			  when ols.moneda = 'URU'
+			  then ols.impuestos/fx.cotizacion_usd_uru
+			  when ols.moneda = 'EUR' 
+			  then ols.impuestos/fx.cotizacion_usd_eur
+			  end, 4) as impuestos_usd,
+		round(case
+			  when ols.moneda = 'ARS'
+			  then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+			  when ols.moneda = 'URU'
+			  then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+			  when ols.moneda = 'EUR' 
+			  then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+			  end, 4) as creditos_usd,
+		ols.pos,
+		ols.is_walkout,
+		ols.line_key
+	from 
+		stg.order_line_sale ols
+	left join 
+		stg.monthly_average_fx_rate fx
+	on
+		fx.mes = date(date_trunc('month', ols.fecha))
+	left join
+		stg.product_master pm
+	on
+		ols.producto = pm.codigo_producto
+	left join
+		stg.store_master sm
+	on
+		ols.tienda = sm.codigo_tienda
+)
+select
+	sum(ventas_usd) as ventas_totales_segmentado
+from
+	ols_usd 
+where
+	subcategoria != 'TV' and
+	pais != 'Argentina'
+;
+
+-- Respuesta pregunta 5 Clase 7 Parte 2
+
+with sales_per_day as (
+	select
+		fecha,
+		sum(cantidad) as qty
+	from
+		stg.order_line_sale
+	group by
+		fecha
+)
+select
+	spd1.fecha,
+	sum(coalesce(spd1.qty, 0)) as sold_units,
+	spd2.fecha as week_before,
+	sum(coalesce(spd2.qty, 0)) as past_sold_units,
+	sum(coalesce(spd1.qty, 0))-sum(coalesce(spd2.qty, 0)) as differential
+from 
+	sales_per_day as spd1
+left join 
+	sales_per_day as spd2
+on 
+	spd1.fecha-interval '7 days' = spd2.fecha
+group by 1, 3
+order by 1
+
+-- Respuesta pregunta 6 Clase 7 Parte 2
+
+CREATE OR REPLACE VIEW stg.new_inventory AS 
+
+with cte as (
+	select
+		i.fecha,
+		i.tienda,
+		sm.pais,
+		sm.nombre as nombre_tienda,
+		i.sku,
+		pm.nombre as nombre_producto,
+		pm.categoria,
+		pm.subcategoria,
+		pm.subsubcategoria,
+		sum(i.inicial+i.final)/2 as daily_average_inventory,
+		((sum(i.inicial+i.final)/2)*sum(c.costo_promedio_usd)) as line_cost,
+		last_value(i.fecha) over(order by i.fecha asc rows between unbounded preceding and unbounded following) as is_last_snapshot
+	from 
+		stg.inventory i
+	left join
+		stg.product_master pm
+	on
+		i.sku = pm.codigo_producto
+	left join
+		stg.store_master sm
+	on
+		i.tienda = sm.codigo_tienda
+	left join 
+		stg.cost c
+	on
+		i.sku = c.codigo_producto
+	group by 1, 2, 3, 4, 5, 6, 7, 8, 9
+), past_avg as (
+select 
+	fecha,
+	producto,
+	tienda,
+	round(sum(cantidad) over(partition by tienda, producto order by fecha rows between 6 preceding and current row), 4)/7 as last_seven_days_average_sale
+from 
+	stg.order_line_sale ols	
+) 
+select 
+	cte.*, 
+	round(coalesce(pa.last_seven_days_average_sale, 0), 2) as average_sale_over_week,
+	round(case when pa.last_seven_days_average_sale is null then 0 else (coalesce(cte.daily_average_inventory,0)/coalesce(pa.last_seven_days_average_sale)) end, 2) as DOH
+from cte
+left join past_avg pa
+on cte.fecha = pa.fecha and cte.sku = pa.producto and cte.tienda = pa.tienda
+;
