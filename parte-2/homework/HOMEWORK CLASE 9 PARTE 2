@@ -1,0 +1,127 @@
+-- Respuesta Pregunta 1 Clase 9 Parte 2
+/* 1. Calcular el crecimiento de ventas por tienda mes a mes, con el valor 
+nominal y el valor % de crecimiento. Utilizar self join.*/
+
+with monthly_store_sales as(
+select
+	tienda as store,
+	extract(month from fecha) as month,
+	sum(venta) as month_sales
+from 
+	stg.order_line_sale
+group by 1, 2
+)
+select 
+	mss1.*,
+	coalesce(mss2.month_sales, 0) as last_month_sales,
+	mss1.month_sales - coalesce(mss2.month_sales, 0) as nominal_growth,
+	round(((mss1.month_sales - coalesce(mss2.month_sales, 0))/mss1.month_sales)*100, 2) as percentual_growth
+from 
+	monthly_store_sales mss1
+left join
+	monthly_store_sales mss2
+	on
+		mss1.store = mss2.store
+	and
+		mss2.month = mss1.month -1
+order by 
+	mss1.store
+	
+-- Respuesta Pregunta 2 Clase 9 Parte 2
+/* 2. Hacer un update a la tabla de product_master agregando una columna 
+llamada "marca", con la marca de cada producto con la primer letra 
+en mayuscula. Sabemos que las marcas que tenemos son: Levi's, Tommy 
+Hilfiger, Samsung, Phillips, Acer, JBL y Motorola. En caso de no 
+encontrarse en la lista usar 'Unknown'.*/
+
+ALTER TABLE bkp.product_master
+ADD marca VARCHAR(100)
+;
+UPDATE bkp.product_master
+SET 
+	marca = 
+		case
+			when lower(nombre) like '%levi''s%' then 'Levi''s'
+			when lower(nombre) like '%tommy hilfiger%' then 'Tommy Hilfiger'
+			when lower(nombre) like '%samsung%' then 'Samsung'
+			when lower(nombre) like '%phillips%' then 'Phillips'
+			when lower(nombre) like '%philips%' then 'Phillips'
+			when lower(nombre) like '%acer%' then 'Acer'
+			when lower(nombre) like '%jbl%' then 'JBL'
+			when lower(nombre) like '%motorola%' then 'Motorola'
+			else 'Unknown'
+			END
+;
+
+-- Respuesta Pregunta 3 Clase 9 Parte 2
+/* 3. Un jefe de area tiene una tabla que contiene datos sobre las principales 
+empresas de distintas industrias en rubros que pueden ser competencia y nos 
+manda por mail la siguiente informacion:
+
+empresa			rubro			facturacion
+El Corte Ingles	Departamental	$110.99B
+Mercado Libre	ECOMMERCE		$115.86B
+Fallabela		departamental	$20.46M
+Tienda Inglesa	Departamental	$10,78M
+Zara			INDUMENTARIA	$999.98M
+
+Armar una query que refleje lo siguiente:
+
+* Rubro
+* FacturacionTotal (total de facturación por rubro).
+* Ordenadas por la columna rubro en orden ascendente.
+
+Nota: a partir del mail que recibimos podemos ponerlo en un csv y subirlo a 
+la base de datos o crear una tabla generando inserts luego.
+
+La columna FacturacionTotal debe estar expresada en millones/billones según 
+corresponda y con 2 decimales después de la coma. Los elementos de la columna 
+rubro debe estar expresados en letra minúscula.
+
+Output esperado:
+
+rubro			facturacion_total
+departamental	111.01B
+ecommerce		115.86B
+indumentaria	999.98M
+*/
+
+DROP TABLE IF EXISTS stg.enterprises
+;
+
+CREATE TABLE stg.enterprises (
+					 empresa VARCHAR(100)
+					,rubro VARCHAR (250)
+					,facturacion BIGINT
+)
+;
+
+INSERT INTO 
+	stg.enterprises
+VALUES 
+	('El Corte Ingles', 'Departamental', 110990000000),
+	('Mercado Libre', 'ECOMMERCE', 115860000000),
+	('Fallabela', 'Departamental', 20460000),
+	('Tienda Inglesa', 'Departamental', 10780000),
+	('Zara', 'INDUMENTARIA', 999980000)
+;
+
+with datos as (
+select
+	lower(rubro) as rubro,
+	sum(facturacion) as facturacion_total
+from 
+	stg.enterprises
+group by 1
+)
+select
+	rubro,
+	case 
+		when facturacion_total > 1000000000 then concat(round(facturacion_total/1000000000, 2), 'B')
+		when facturacion_total > 1000000 then concat(round(facturacion_total/1000000, 2), 'M')
+		else cast(facturacion_total as text)
+		end as facturaciontotal
+from
+	datos
+order by 1 asc
+;
