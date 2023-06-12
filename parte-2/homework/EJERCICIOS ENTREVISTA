@@ -1,0 +1,175 @@
+-- Respuesta Ejercicios Entrevista, Ejercicio 1 Parte 2
+/*Ejecutar el siguiente script para crear la tabla turistas dentro del esquema test*/
+
+create schema test
+;
+drop table if exists test.turistas
+;
+
+create table test.turistas(
+				city varchar(50),
+				days date,
+				personas int
+);
+
+insert into test.turistas values('CABA','2022-01-01',100);
+insert into test.turistas values('CABA','2022-01-02',200);
+insert into test.turistas values('CABA','2022-01-03',300);
+insert into test.turistas values('Cordoba','2022-01-01',100);
+insert into test.turistas values('Cordoba','2022-01-02',100);
+insert into test.turistas values('Cordoba','2022-01-03',300);
+insert into test.turistas values('Madrid','2022-01-01',100);
+insert into test.turistas values('Madrid','2022-01-02',200);
+insert into test.turistas values('Madrid','2022-01-03',150);
+insert into test.turistas values('Punta del Este','2022-01-01',100);
+insert into test.turistas values('Punta del Este','2022-01-02',300);
+insert into test.turistas values('Punta del Este','2022-01-03',200);
+insert into test.turistas values('Punta del Este','2022-01-04',400);
+
+select * from test.turistas
+
+/*Cuales son las ciudades donde la afluencia de turistas es continuamente creciente*/
+	
+with movimientos as (
+	select
+		city,
+		days,
+		personas,
+		case
+		when (last_value(personas) over(partition by city order by days)) > (lag(personas) over(partition by city order by days asc rows between unbounded preceding and current row)) then 1
+		else 0
+		end as cre
+	from
+		test.turistas
+)
+select 
+	city,
+	case
+		when sum(cre) = Count(*)-1 then 'true'
+		else 'false'
+		end as is_continuosly_increasing
+from 
+	movimientos
+group by 1
+
+-- Respuesta Ejercicios Entrevista, Ejercicio 2 Parte 2
+/*Ejecutar el siguiente script para crear la tabla empleados dentro del esquema test*/
+
+drop table if exists test.empleados
+;
+
+create table test.empleados (
+				emp_id int, 
+				empleado varchar(50), 
+				salario bigint, 
+				manager_id int
+);
+
+insert into test.empleados values (1,'Clara',10000,4);
+insert into test.empleados values (2,'Pedro',15000,5);
+insert into test.empleados values (3,'Daniel',10000,4);
+insert into test.empleados values (4,'Hernan',5000,2);
+insert into test.empleados values (5,'Debora',12000,6);
+insert into test.empleados values (6,'Ricardo',12000,2);
+insert into test.empleados values (7,'Luciano',9000,2);
+insert into test.empleados values (8,'Romina',5000,2);
+
+select * from test.empleados
+
+/*Encontrar a los empleados cuyo salario es mayor que el de su manager*/
+
+with salarios as(
+	select 
+		t1.empleado,
+		t1.salario as salario_empleado,
+		t2.empleado as manager,
+		t2.salario as salario_manager
+	from
+		test.empleados t1
+	inner join
+		test.empleados t2
+		on
+			t1.manager_id = t2.emp_id
+)
+select
+	empleado as bigger_salary_than_manager
+from
+	salarios
+where
+	salario_empleado > salario_manager
+;
+
+-- Respuesta Ejercicios Entrevista, Ejercicio 3 Parte 2
+
+/*Ejecutar el siguiente script para crear la tabla players y matches dentro del esquema test*/
+
+drop table if exists test.players
+;
+
+create table test.players (
+				player_id int, 
+				grupo varchar(1)
+);
+
+insert into test.players values (15,'A');
+insert into test.players values (25,'A');
+insert into test.players values (30,'A');
+insert into test.players values (45,'A');
+insert into test.players values (10,'B');
+insert into test.players values (35,'B');
+insert into test.players values (50,'B');
+insert into test.players values (20,'C');
+insert into test.players values (40,'C');
+
+create table test.matches (
+				match_id int, 
+				first_player int, 
+				second_player int, 
+				first_score int, 
+				second_score int
+);
+
+insert into test.matches values (1,15,45,3,0);
+insert into test.matches values (2,30,25,1,2);
+insert into test.matches values (3,30,15,2,0);
+insert into test.matches values (4,40,20,5,2);
+insert into test.matches values (5,35,50,1,1);
+
+/*Encontrar el player_id ganador de cada grupo. El ganador es aquel que anota 
+mas puntos (score) en caso de empate, el que tenga menor player_id gana*/
+
+with scores as (
+	select
+		first_player as player,
+		sum(first_score) as score
+	from
+		test.matches
+	group by 1
+union all
+	select
+		second_player as player,
+		sum(second_score) as score
+	from
+		test.matches
+	group by 1
+), teams_score as ( 
+	select 
+		player,
+		pl.grupo as team,
+		sum(score) as score
+	from
+		scores
+	inner join
+		test.players pl
+		on
+			scores.player = pl.player_id
+	group by 1, 2
+	order by 2 asc, 1 asc
+)
+select distinct
+	first_value(player) over(partition by team order by score desc, player asc) as id_ganador,
+	team
+from 
+	teams_score
+order by 2 asc
+;
