@@ -167,22 +167,8 @@ select *, ((venta/conversion_usd)+(coalesce(descuento, 0)/conversion_usd))-costo
 from revenues_usd
 
 -- Respuesta pregunta 11 clase 3
--- Esta muestra nulls como "Sin ventas"
-select 
-	case 
-		when ols.orden is null then 'Sin_ventas' 
-		else ols.orden
-	end, 
-pm.subsubcategoria, count(distinct ols.producto) as cantidad_items_distintos
-from stg.product_master pm
-left join stg.order_line_sale ols on pm.codigo_producto = ols.producto
-group by ols.orden, pm.subsubcategoria
-order by ols.orden
-
--- Esta no muestra valores null
 select ols.orden, pm.subsubcategoria, sum(ols.cantidad) as cantidad_items
-from stg.product_master pm
-left join stg.order_line_sale ols on pm.codigo_producto = ols.producto
-where ols.orden is not null
-group by ols.orden, pm.subsubcategoria
-order by ols.orden
+from stg.order_line_sale ols
+left join stg.product_master pm on pm.codigo_producto = ols.producto
+group by 1, 2
+order by 1
