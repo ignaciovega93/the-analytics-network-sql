@@ -2,49 +2,43 @@
 select nombre, codigo_producto, categoria,
 case when color is null then 'unknown' else color end as colorf
 from stg.product_master
-where nombre like '%PHILIPS%' or nombre like '%Samsung%' or nombre like '%SAMSUNG%'
-group by nombre, codigo_producto, categoria, colorf
-order by codigo_producto
+where nombre like '%PHILIPS%' or nombre like '%Samsung%' or nombre like '%SAMSUNG%' -- sin LOWER/UPPER
+
+select nombre, codigo_producto, categoria,
+case when color is null then 'unknown' else color end as colorf
+from stg.product_master
+where lower(nombre) like '%philips%' or lower(nombre) like '%samsung%' -- con LOWER
 
 -- Respuesta pregunta 2 clase 3
 select ols.tienda, sm.pais, sm.provincia, sum(ols.venta) as ventas, sum(ols.impuestos) as impuesto, ols.moneda
-from stg.store_master sm
-left join stg.order_line_sale ols on sm.codigo_tienda = ols.tienda
+from stg.order_line_sale ols
+left join stg.store_master sm on sm.codigo_tienda = ols.tienda
 group by ols.tienda, sm.pais, sm.provincia, ols.moneda
-order by tienda -- Tiendas sin ventas representadas como NULL
-
-select coalesce(ols.tienda, 0), sm.pais, sm.provincia, sum(coalesce(ols.venta, 0)) as ventas, sum(coalesce(ols.impuestos,0)) as impuesto, 
-coalesce(ols.moneda, 'tienda_sin_ventas')
-from stg.store_master sm
-left join stg.order_line_sale ols on sm.codigo_tienda = ols.tienda
-group by ols.tienda, sm.pais, sm.provincia, coalesce(ols.moneda, 'tienda_sin_ventas')
-order by tienda -- Tiendas sin ventas representadas como "tienda_sin_ventas"
+order by tienda 
 
 -- Respuesta pregunta 3 clase 3 {Nota: En este ejercicio intenté la cláusula SUM como SUM(A)+SUM(B) e igual me arrojó valores NULL, por lo tanto apliqué COALESCE}
 
-select pm.codigo_producto, pm.subcategoria, 
-sum(ols.venta)+sum(coalesce(ols.descuento, 0))-sum(coalesce(ols.impuestos, 0))+sum(coalesce(ols.creditos, 0)) as venta_total, ols.moneda
-from stg.product_master pm
-left join stg.order_line_sale ols on pm.codigo_producto = ols.producto
-group by pm.codigo_producto, pm.subcategoria, ols.moneda
-order by subcategoria, moneda -- Productos que no presentan venta se muestran en NULL
-
-select pm.codigo_producto, pm.subcategoria, 
-coalesce(sum(ols.venta)+sum(coalesce(ols.descuento, 0))-sum(coalesce(ols.impuestos, 0))+sum(coalesce(ols.creditos, 0)),0) as venta_total, 
-coalesce(ols.moneda, 'sin_ventas') as moneda
-from stg.product_master pm
-left join stg.order_line_sale ols on pm.codigo_producto = ols.producto
-group by pm.codigo_producto, pm.subcategoria, coalesce(ols.moneda, 'sin_ventas')
-order by subcategoria, moneda -- Productos que no presentan venta se muestran en 0 y "sin_ventas"
+select ols.producto, pm.subcategoria, sum(ols.venta)+sum(coalesce(ols.descuento, 0))-sum(coalesce(ols.impuestos, 0))+sum(coalesce(ols.creditos, 0)) as venta_total, ols.moneda
+from stg.order_line_sale ols
+left join stg.product_master pm on pm.codigo_producto = ols.producto
+group by ols.producto, pm.subcategoria, ols.moneda
+order by subcategoria, moneda
 
 -- Respuesta pregunta 4 clase 3
+select sm.pais || ' - ' || sm.provincia as concatenacion, ols.producto, pm.subcategoria, sum(ols.cantidad) as unidades_vendidas
+from stg.order_line_sale ols
+left join stg.store_master sm on sm.codigo_tienda = ols.tienda
+left join stg.product_master pm on ols.producto = pm.codigo_producto
+group by sm.pais || ' - ' || sm.provincia,  ols.producto, pm.subcategoria
+order by 1 -- filtrado por producto - categoria
+
 select sm.pais || ' - ' || sm.provincia as concatenacion, pm.subcategoria, sum(ols.cantidad) as unidades_vendidas
-from stg.store_master sm
-left join stg.order_line_sale ols on sm.codigo_tienda = ols.tienda
+from stg.order_line_sale ols
+left join stg.store_master sm on sm.codigo_tienda = ols.tienda
 left join stg.product_master pm on ols.producto = pm.codigo_producto
 where ols.producto is not null
 group by sm.pais || ' - ' || sm.provincia, pm.subcategoria
-order by sm.pais || ' - ' || sm.provincia
+order by 1 -- filtrado por categoria
 
 -- Respuesta pregunta 5 clase 3
 create view stg.super_store as
@@ -55,12 +49,37 @@ where to_date(ssc.fecha, 'YYYY-MM-DD') >= sm.fecha_apertura
 group by sm.nombre, sm.fecha_apertura
 
 -- Respuesta pregunta 6 clase 3
-select i.sku as codigo_producto, i.tienda, sm.nombre, sum(i.inicial)+sum(i.final)/2 as inventario_promedio, 
-date(date_trunc('month', i.fecha)) as mes
-from stg.store_master sm
-left join stg.inventory i on sm.codigo_tienda = i.tienda
-group by i.sku, i.tienda, sm.nombre, date_trunc('month', i.fecha)
-order by i.tienda, mes, codigo_producto
+select 
+	i.sku,
+	i.tienda,
+	sm.nombre,
+	extract(month from i.fecha) as mes,
+	avg(inicial+final)/2 as inventario_promedio
+from 
+	stg.store_master sm
+left join 
+	stg.inventory i 
+	on 
+		sm.codigo_tienda = i.tienda
+group by 
+	1,2,3,4
+order by 1 -- este lo hice con la formula que nos mostraste en clases (arroja valores con decimales)
+
+select 
+	i.sku,
+	i.tienda,
+	sm.nombre,
+	extract(month from i.fecha) as mes,
+	(sum(inicial+final)/2)/count(*) as inventario_promedio
+from 
+	stg.store_master sm
+left join 
+	stg.inventory i 
+	on 
+		sm.codigo_tienda = i.tienda
+group by 
+	1,2,3,4
+order by 1 -- este lo hice con un sum/count utilizando count(*) para dividirlo por el total de registros correspondientes al filtro y arroja valores sin decimales
 
 -- Respuesta pregunta 7 clase 3
 -- Este lo pude hacer sin CTE ya que me di cuenta que no siendo CASE una función de agregación, permite agrupar por ésta.
