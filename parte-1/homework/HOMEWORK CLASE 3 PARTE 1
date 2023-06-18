@@ -54,7 +54,7 @@ select
 	i.tienda,
 	sm.nombre,
 	extract(month from i.fecha) as mes,
-	avg(inicial+final)/2 as inventario_promedio
+	avg((inicial+final)/2) as inventario_promedio
 from 
 	stg.store_master sm
 left join 
