@@ -4,7 +4,7 @@ from stg.store_master
 
 -- Respuesta pregunta 2 Clase 2
 Select subcategoria, 
-count(distinct codigo_producto) as n°_productos
+count(distinct codigo_producto) as n_productos
 from stg.product_master
 group by subcategoria
 
@@ -19,6 +19,12 @@ sum(coalesce(descuento, 0)) as descuento_x_moneda
 from stg.order_line_sale
 where fecha between '2022-11-01' and '2022-11-30'
 group by moneda
+
+select distinct moneda,
+sum(descuento) as descuento_x_moneda
+from stg.order_line_sale
+where fecha between '2022-11-01' and '2022-11-30'
+group by moneda --  corregida sin coalesce (dejé igual el anterior, ya que por alguna razon, no me gusta que aparezca el null y prefiero el coalesce para que apareza en 0)
 
 -- Respuesta pregunta 5 Clase 2
 select moneda,
@@ -44,7 +50,12 @@ order by orden
 select tienda, sku, fecha, avg(inicial+final)/2 as inventario_promedio
 from stg.inventory
 group by tienda, fecha, sku
-order by fecha, sku, tienda asc
+order by fecha, sku, tienda asc -- inventario diario por sku y tienda
+
+select tienda, fecha, avg((inicial+final)/2) as inventario_promedio
+from stg.inventory
+group by tienda, fecha
+order by fecha, tienda asc -- inventario diario por tienda
 
 -- Respuesta pregunta 9 Clase 2
 select producto,
