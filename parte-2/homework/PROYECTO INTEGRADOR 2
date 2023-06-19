@@ -1,0 +1,326 @@
+/* Ejercicio Integrador Parte 2
+Uno de los proyectos que viene trabajando nuestra empresa es de mejorar 
+la visibilidad que le damos a nuestros principales KPIs que calculamos 
+durante la Parte 1. Para eso, uno de los requisitos futuros va a ser crear 
+una serie de dashboards en el cual podramos investigar cada metrica, su 
+progresion en el tiempo y para diferentes cortes de los datos (Ejemplo: 
+categoria, tienda, mes, producto, etc.). Para lograr esto, el primer objetivo
+es crear una tabla donde se pueda obtener todo esto en un mismo lugar.
+
+Nivel de detalle de la tabla:
+
+* Fecha
+* SKU
+* Tienda
+
+Con los siguientes atributos
+
+* Tienda: Pais, provincia, Nombre de tienda
+* SKU: Categoria, Subcategoria, Subsubcategoria, proveedor
+* Fecha: dia, mes, año, año fiscal, quarter fiscal*/
+
+CREATE TABLE stg.new_ols as (
+
+with extra_income as (
+	select
+		orden,
+		producto,
+		round(200, 3) / count(1) over() as extra_income
+	from
+		stg.order_line_sale ols
+	left join
+		stg.product_master pm
+		on
+			ols.producto = pm.codigo_producto
+	where lower(pm.nombre) like '%philips%'
+), returned_products as (
+	select
+		orden_venta as orden,
+		item as producto,
+		min(cantidad) as qty_returned
+	from
+		stg.return_movements
+	group by 1, 2
+)
+select 
+	ols.orden,
+	ols.tienda,
+	sm.pais,
+	sm.provincia,
+	sm.nombre as nombre_tienda,
+	ols.producto as SKU,
+	pm.categoria,
+	pm.subcategoria,
+	pm.subsubcategoria,
+	s.nombre as proveedor,
+	ols.cantidad,
+	coalesce(rp.qty_returned, 0) as qty_returned,
+	round(case
+		when ols.moneda = 'ARS' then ols.venta/fx.cotizacion_usd_peso
+		when ols.moneda = 'EUR' then ols.venta/fx.cotizacion_usd_eur
+		when ols.moneda = 'URU' then ols.venta/fx.cotizacion_usd_uru
+		end, 3) as ventas,
+	round(case
+		when ols.moneda = 'ARS' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'EUR' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_eur
+		when ols.moneda = 'URU' then coalesce(ols.descuento, 0)/fx.cotizacion_usd_uru
+		end, 3) as descuentos,
+	round(case
+		when ols.moneda = 'ARS' then ols.impuestos/fx.cotizacion_usd_peso
+		when ols.moneda = 'EUR' then ols.impuestos/fx.cotizacion_usd_eur
+		when ols.moneda = 'URU' then ols.impuestos/fx.cotizacion_usd_uru
+		end, 3) as impuestos,
+	round(case
+		when ols.moneda = 'ARS' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_peso
+		when ols.moneda = 'EUR' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_eur
+		when ols.moneda = 'URU' then coalesce(ols.creditos, 0)/fx.cotizacion_usd_uru
+		end, 3) as creditos,
+	round(coalesce(ei.extra_income, 0), 3) as extra_income,
+	(ols.cantidad*c.costo_promedio_usd) as costo,
+	ols.fecha,
+	dt.dia_semana as dia,
+	dt.mes,
+	dt.anno,
+	dt.anno_fiscal,
+	dt.trimestre_fiscal
+from 
+	stg.order_line_sale ols
+left join 
+	stg.store_master sm
+	on
+		ols.tienda = sm.codigo_tienda
+left join
+	stg.product_master pm
+	on
+		ols.producto = pm.codigo_producto
+left join
+	stg.suppliers s
+	on
+		ols.producto = s.codigo_producto
+left join
+	returned_products rp
+	on
+		ols.orden = rp.orden
+	and
+		ols.producto = rp.producto
+left join
+	extra_income ei
+	on
+		ols.orden = ei.orden
+	and
+		ols.producto = ei.producto
+left join
+	stg.date_table dt
+	on
+		ols.fecha = dt.fecha
+left join
+	stg.monthly_average_fx_rate fx
+	on
+		fx.mes = date(date_trunc('month', ols.fecha))
+left join
+	stg.cost c
+	on
+		ols.producto = c.codigo_producto
+where
+	s.is_primary is true
+);
+
+select * from stg.new_ols -- verifico las métricas.
+
+/*Y que se pueda calcular las siguiente metricas:
+
+* Ventas brutas
+* Descuentos
+* Impuestos
+* Creditos
+* Ventas netas (inluye ventas y descuentos)
+* Valor final pagado (incluye ventas, descuentos, impuestos y creditos)
+* ROI
+* Costos
+* Margen bruto (gross margin)
+* AGM (adjusted gross margin)
+* AOV
+* Numero de devoluciones
+
+Y la posibilidad de obtener para cada una de las metricas anteriores el 
+crecimiento mes a mes.
+
+Notas:
+
+* No es necesario que este todo precalculado, sino que tenemos que generar 
+  una tabla lo suficientemente flexible para poder calcular todas las metricas 
+  listadas al nivel de de agregacion que querramos.
+* Tiene que ser una tabla en lugar de una vista para que pueda ser consumido 
+  rapidamente por el usuario final.
+* La idea que este todo en un solo lugar facilita la creacion de una sola fuente 
+  de la verdad ("single source of truth").
+* AGM es el gross margen ajustado, es decir no solo tomar los costos de los 
+  productos sino tomar otros gastos o descuentos que hacen los proveedores al 
+  momento de vender el producto. Al ser fijos, estos tienen que distribuirse en 
+  los productos vendidos de manera proporcional.
+  * Entonces el AGM seria algo asi 
+    -> AGM: Ventas netas - Costos - Otros Gastos + Otros Ingresos
+  * En este caso se nos pide que distribuyamos el ingreso extra de una TV dentro 
+    de los productos que se vendieron de Phillips. Es decir los unicos productos 
+    donde el Margen bruto va a ser distintos al AGM es en los productos Phillips.
+* El periodo fiscal de la empresa empieza el primero de febrero.
+* Las metricas tienen que estar calculadas en dolares.*/
+
+-- Query 1: venta neta, valor final pagado, margen bruto y AGM (todo por orden o a nivel particular).
+select 
+	orden,
+	tienda,
+	pais,
+	provincia,
+	nombre_tienda,
+	sku,
+	categoria,
+	subcategoria,
+	subsubcategoria,
+	proveedor,
+	cantidad,
+	qty_returned,
+	ventas,
+	descuentos,
+	impuestos,
+	creditos,
+	extra_income,
+	costo,
+	(ventas+descuentos) as venta_neta,
+	(ventas+descuentos+impuestos+creditos) as valor_final_pagado,
+	((ventas+descuentos)-costo) as margen_bruto,
+	(((ventas+descuentos)-costo)+extra_income) as AGM,
+	fecha, 
+	dia,
+	mes,
+	anno,
+	anno_fiscal,
+	trimestre_fiscal
+from 
+	stg.new_ols
+order by orden
+
+-- Query 2: ventas brutas, descuentos, impuestos, creditos, ventas netas, valor final pagado, costos, 
+-- ingresos extra (extra_income), margen bruto, AGM y número de devoluciones (a nivel general).
+select
+	sum(ventas) as ventas_brutas,
+	sum(descuentos) as total_descuentos,
+	sum(impuestos) as total_impuestos,
+	sum(creditos) as total_creditos,
+	sum(ventas+descuentos) as ventas_netas,
+	sum(ventas+descuentos+impuestos+creditos) as Valor_final_pagado,
+	sum(costo) as costo_total,
+	sum(extra_income) as total_ingreso_extra,
+	sum(ventas+descuentos)-sum(costo) as total_margen_bruto,
+	sum(ventas+descuentos)-sum(costo)+sum(extra_income) as total_AGM,
+	sum(qty_returned) as numero_devoluciones
+from
+	 stg.new_ols
+
+-- validación retornos (revisar nota)
+select * from stg.order_line_sale where orden = 'M999000006' and producto = 'p200010'
+/* Nota: Noté que el total de devoluciones según la tabla return_movements es de 4 ordenes, las 4 ordenes 
+están en la tabla order_line_sale, pero la orden 'M999000006' no contiene el producto 'p200010' devuelto, 
+por lo que el numero de devoluciones efectivas en esta tabla será de 3, siendo este el resultado que arrojó 
+la query 2*/
+
+-- ROI
+-- ROI 1: Panorama general
+with new_inventory as(
+select
+	extract(year from i.fecha) || '-' || extract(month from i.fecha) as ym,
+	i.sku,
+	round(avg((inicial+final)/2), 3) as inventario_promedio,
+	c.costo_promedio_usd as costo_usd_unitario,
+	round(avg(((inicial+final)/2)*c.costo_promedio_usd), 3) as costo_inventario_usd
+from
+	stg.inventory i
+left join
+	stg.cost c
+	on
+		i.sku = c.codigo_producto
+group by 
+	extract(year from i.fecha) || '-' || extract(month from i.fecha),
+	i.sku,
+	c.costo_promedio_usd
+), ventas as (
+	select
+		no.anno || '-' || extract(month from no.fecha) as ym,
+		no.sku,
+		sum(no.ventas+no.descuentos) as ventas_netas
+	from
+		stg.new_ols no
+	group by 1, 2
+)
+select
+	coalesce (ni.ym, v.ym) as year_month,
+	sum(v.ventas_netas) as venta_neta,
+	sum(ni.costo_inventario_usd) as costo_inventario,
+	sum(v.ventas_netas)/sum(ni.costo_inventario_usd) as ROI
+from 
+	ventas v
+full outer join -- contabiliza todo los productos en inventario, incluidos aquellos que no presentaron ventas
+	new_inventory ni
+	on
+		v.sku = ni.sku
+where 
+	coalesce(v.ym, ni.ym) = '2022-11'
+group by 1
+
+-- ROI 2: Panorama por producto (o en particular)
+with new_inventory as(
+select
+	extract(year from i.fecha) || '-' || extract(month from i.fecha) as ym,
+	i.sku,
+	round(avg((inicial+final)/2), 3) as inventario_promedio,
+	c.costo_promedio_usd as costo_usd_unitario,
+	round(avg(((inicial+final)/2)*c.costo_promedio_usd), 3) as costo_inventario_usd
+from
+	stg.inventory i
+left join
+	stg.cost c
+	on
+		i.sku = c.codigo_producto
+group by 
+	extract(year from i.fecha) || '-' || extract(month from i.fecha),
+	i.sku,
+	c.costo_promedio_usd
+), ventas as (
+	select
+		no.anno || '-' || extract(month from no.fecha) as ym,
+		no.sku,
+		sum(no.ventas+no.descuentos) as ventas_netas
+	from
+		stg.new_ols no
+	group by 1, 2
+)
+select
+	coalesce(v.sku, ni.sku) as sku,
+	coalesce(ni.ym, v.ym) as year_month,
+	coalesce(sum(v.ventas_netas),0) as venta_neta,
+	sum(ni.costo_inventario_usd) as costo_inventario,
+	coalesce(sum(v.ventas_netas),0)/sum(ni.costo_inventario_usd) as ROI
+from 
+	ventas v
+full outer join -- contabiliza todo los productos en inventario, incluidos aquellos que no presentaron ventas
+	new_inventory ni
+	on
+		v.sku = ni.sku
+where 
+	coalesce(v.ym, ni.ym) = '2022-11'
+group by 1, 2
+
+-- AOV
+
+with pre_aov as(
+	select
+		orden,
+		round(sum(ventas+descuentos)/count(*), 3) as valor_orden_promedio
+	from
+		stg.new_ols
+	group by 1
+)
+select 
+	round(sum(valor_orden_promedio)/count(orden), 6) as AOV
+from
+	pre_aov
