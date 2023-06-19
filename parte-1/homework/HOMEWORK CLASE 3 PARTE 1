@@ -63,23 +63,7 @@ left join
 		sm.codigo_tienda = i.tienda
 group by 
 	1,2,3,4
-order by 1 -- este lo hice con la formula que nos mostraste en clases (arroja valores con decimales)
-
-select 
-	i.sku,
-	i.tienda,
-	sm.nombre,
-	extract(month from i.fecha) as mes,
-	(sum(inicial+final)/2)/count(*) as inventario_promedio
-from 
-	stg.store_master sm
-left join 
-	stg.inventory i 
-	on 
-		sm.codigo_tienda = i.tienda
-group by 
-	1,2,3,4
-order by 1 -- este lo hice con un sum/count utilizando count(*) para dividirlo por el total de registros correspondientes al filtro y arroja valores sin decimales
+order by 1
 
 -- Respuesta pregunta 7 clase 3
 -- Este lo pude hacer sin CTE ya que me di cuenta que no siendo CASE una función de agregación, permite agrupar por ésta.
