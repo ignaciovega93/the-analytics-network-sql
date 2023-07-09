@@ -2,7 +2,7 @@
 ALTER TABLE dim.suppliers
 ADD CONSTRAINT uniqueness_product_id UNIQUE (product_id);
 
--- cretamos el ETL
+-- creamos el ETL
 CREATE OR REPLACE PROCEDURE etl.sp_suppliers()
 LANGUAGE SQL as $$
 	INSERT INTO dim.suppliers (
