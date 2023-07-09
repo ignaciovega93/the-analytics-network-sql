@@ -38,20 +38,7 @@ LANGUAGE SQL as $$
 			else 'Unknown'
 			end as brand
 	from stg.product_master
-	ON CONFLICT (product_id) DO UPDATE
-	SET
-		name = excluded.name,
-		category = excluded.category,
-		subcategory = excluded.subcategory,
-		subsubcategory = excluded.subsubcategory,
-		material = excluded.material,
-		colour = excluded.colour,
-		made_in = excluded.made_in,
-		ean = excluded.ean,
-		is_active = excluded.is_active,
-		has_bluetooth = excluded.has_bluetooth,
-		size = excluded.size,
-		brand = excluded.brand;
+	ON CONFLICT (product_id) DO NOTHING;
 $$;
 
 call etl.sp_product_master();
