@@ -360,7 +360,9 @@ CREATE TABLE dim.suppliers
 					
 					CONSTRAINT fk_product_id_suppliers
 					FOREIGN KEY (product_id)
-					REFERENCES dim.product_master (product_id)
+					REFERENCES dim.product_master (product_id),
+					
+					CONSTRAINT uniqueness_product_id UNIQUE (product_id)
 				);
 
 select * from dim.cost
@@ -741,10 +743,6 @@ $$;
 
 call etl.sp_product_master();
 		
--- agregamos una restriccion para que no hayan duplicados
-ALTER TABLE dim.suppliers
-ADD CONSTRAINT uniqueness_product_id UNIQUE (product_id);
-
 -- creamos el ETL
 CREATE OR REPLACE PROCEDURE etl.sp_suppliers()
 LANGUAGE SQL as $$
