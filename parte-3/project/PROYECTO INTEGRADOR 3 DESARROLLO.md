@@ -664,11 +664,11 @@ $$;
 
 call etl.sp_store_master();
 
-ALTER TABLE fct.market_count RENAME TO unified_count; -- renombré la nueva tabla para que se sepa que está unificada
+ALTER TABLE fct.market_count RENAME TO customer_count; -- renombré la nueva tabla unificada
 
-CREATE OR REPLACE PROCEDURE etl.sp_unified_count()
+CREATE OR REPLACE PROCEDURE etl.sp_customer_count()
 LANGUAGE SQL as $$
-	INSERT INTO fct.unified_count (
+	INSERT INTO fct.customer_count (
 		store_id, 
 		dates, 
 		count
@@ -692,7 +692,7 @@ LANGUAGE SQL as $$
 		) as union_data;
 $$; -- consolidación de ambas tablas en una
 
-call etl.sp_unified_count()
+call etl.sp_customer_count()
 
 DROP TABLE fct.super_store_count; -- elimino la tabla que ya no presta utilidad
 
